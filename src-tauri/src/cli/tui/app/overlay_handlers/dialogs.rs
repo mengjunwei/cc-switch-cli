@@ -124,24 +124,34 @@ impl App {
                         }
                     }
                     ConfirmAction::WebDavMigrateV1ToV2 => Action::ConfigWebDavMigrateV1ToV2,
+                    ConfirmAction::CloudSyncTransfer { backend, intent } => {
+                        match (backend, intent) {
+                            (CloudSyncBackend::WebDav, CloudSyncTransferIntent::Upload) => {
+                                Action::ConfigWebDavUpload
+                            }
+                            (CloudSyncBackend::WebDav, CloudSyncTransferIntent::Restore) => {
+                                Action::ConfigWebDavDownload
+                            }
+                            (CloudSyncBackend::S3Compatible, CloudSyncTransferIntent::Upload) => {
+                                Action::ConfigS3Upload
+                            }
+                            (CloudSyncBackend::S3Compatible, CloudSyncTransferIntent::Restore) => {
+                                Action::ConfigS3Download
+                            }
+                        }
+                    }
+                    ConfirmAction::CloudSyncReset { backend } => match backend {
+                        CloudSyncBackend::WebDav => Action::ConfigWebDavReset,
+                        CloudSyncBackend::S3Compatible => Action::ConfigS3Reset,
+                    },
                     ConfirmAction::ClaudeModelFillAll { source_idx } => {
                         let source_idx = *source_idx;
                         if let Some(FormState::ProviderAdd(provider)) = self.form.as_mut() {
-                            let value = provider
-                                .claude_model_input(source_idx)
-                                .map(|input| input.value.clone())
-                                .unwrap_or_default();
-                            for idx in 0..4 {
-                                if idx != source_idx {
-                                    if let Some(input) = provider.claude_model_input_mut(idx) {
-                                        input.set(value.clone());
-                                    }
-                                }
-                            }
-                            provider.mark_claude_model_config_touched();
+                            provider.fill_claude_models_from(source_idx);
                         }
                         self.overlay = Overlay::ClaudeModelPicker {
                             selected: source_idx,
+                            column: ClaudeModelPickerColumn::Model,
                             editing: false,
                         };
                         return Some(Action::None);
@@ -154,6 +164,7 @@ impl App {
                 if let ConfirmAction::ClaudeModelFillAll { source_idx } = confirm.action {
                     self.overlay = Overlay::ClaudeModelPicker {
                         selected: source_idx,
+                        column: ClaudeModelPickerColumn::Model,
                         editing: false,
                     };
                     return Some(Action::None);
@@ -207,6 +218,7 @@ impl App {
                     ConfirmAction::ClaudeModelFillAll { source_idx } => {
                         self.overlay = Overlay::ClaudeModelPicker {
                             selected: source_idx,
+                            column: ClaudeModelPickerColumn::Model,
                             editing: false,
                         };
                         Action::None
@@ -360,7 +372,6 @@ impl App {
                         },
                         input: TextInput::new(raw),
                         submit: TextSubmit::UsageCustomRange,
-                        secret: false,
                     });
                     Action::None
                 }
@@ -396,7 +407,6 @@ impl App {
                 prompt: codex_model_catalog_field_prompt(field).to_string(),
                 input: TextInput::new(trimmed),
                 submit: TextSubmit::CodexModelCatalogField { row, field },
-                secret: false,
             });
             return Action::None;
         }
@@ -448,7 +458,6 @@ impl App {
                 prompt: texts::tui_webdav_jianguoyun_username_prompt().to_string(),
                 input: TextInput::new(""),
                 submit: TextSubmit::WebDavJianguoyunUsername,
-                secret: false,
             });
             return Action::None;
         }
@@ -459,7 +468,6 @@ impl App {
             prompt: texts::tui_webdav_jianguoyun_app_password_prompt().to_string(),
             input: TextInput::new(""),
             submit: TextSubmit::WebDavJianguoyunPassword,
-            secret: true,
         });
         Action::None
     }
@@ -472,7 +480,6 @@ impl App {
                 prompt: texts::tui_webdav_jianguoyun_app_password_prompt().to_string(),
                 input: TextInput::new(""),
                 submit: TextSubmit::WebDavJianguoyunPassword,
-                secret: true,
             });
             return Action::None;
         }
@@ -513,7 +520,6 @@ impl App {
                 prompt: texts::tui_settings_proxy_listen_address_prompt().to_string(),
                 input: TextInput::new(trimmed),
                 submit: TextSubmit::SettingsProxyListenAddress,
-                secret: false,
             });
             return Action::None;
         }
@@ -541,7 +547,6 @@ impl App {
                 prompt: texts::tui_settings_proxy_listen_port_prompt().to_string(),
                 input: TextInput::new(trimmed),
                 submit: TextSubmit::SettingsProxyListenPort,
-                secret: false,
             });
             return Action::None;
         };
@@ -556,7 +561,6 @@ impl App {
                 prompt: texts::tui_settings_proxy_listen_port_prompt().to_string(),
                 input: TextInput::new(trimmed),
                 submit: TextSubmit::SettingsProxyListenPort,
-                secret: false,
             });
             return Action::None;
         }

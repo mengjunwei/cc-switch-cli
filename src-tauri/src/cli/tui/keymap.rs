@@ -59,6 +59,13 @@ pub(crate) fn never(_: &super::app::App, _: &super::data::UiData) -> bool {
     false
 }
 
+/// Hide a secondary binding from the compact key bar while retaining it in
+/// the full help sheet. This differs from `never`, which hides the binding
+/// from both surfaces.
+pub(crate) fn help_only(_: &super::app::App, _: &super::data::UiData) -> bool {
+    false
+}
+
 /// (display, label) pairs for the help sheet: every binding except the
 /// `never`-shown aliases, labeled for the given app/data. Unlike
 /// `key_bar_items` this does not evaluate each binding's `shown` state, so
@@ -110,7 +117,7 @@ pub(crate) mod providers {
             keys: &[KeyCode::Enter],
             intent: Intent::Primary,
             label: primary_label,
-            shown: import_shown,
+            shown: primary_shown,
         },
         Binding {
             display: "Space",
@@ -138,7 +145,7 @@ pub(crate) mod providers {
             keys: &[KeyCode::Char('e')],
             intent: Intent::Edit,
             label: |_, _| texts::tui_key_edit(),
-            shown: selected_editable,
+            shown: super::help_only,
         },
         Binding {
             display: "d",
@@ -208,6 +215,10 @@ pub(crate) mod providers {
 
     fn import_shown(_app: &App, data: &UiData) -> bool {
         data.providers.rows.is_empty() && !data.providers.loading
+    }
+
+    fn primary_shown(app: &App, data: &UiData) -> bool {
+        import_shown(app, data) || selected_editable(app, data)
     }
 
     fn primary_label(_app: &App, data: &UiData) -> &'static str {
@@ -630,7 +641,7 @@ pub(crate) mod sessions {
         Restore,
         Delete,
         Refresh,
-        ShowAll,
+        Project,
     }
 
     pub(crate) const BINDINGS: &[Binding<Intent>] = &[
@@ -663,10 +674,10 @@ pub(crate) mod sessions {
             shown: |_, _| true,
         },
         Binding {
-            display: "a",
-            keys: &[KeyCode::Char('a')],
-            intent: Intent::ShowAll,
-            label: show_all_label,
+            display: "p",
+            keys: &[KeyCode::Char('p')],
+            intent: Intent::Project,
+            label: |_, _| texts::tui_key_sessions_project(),
             shown: |_, _| true,
         },
     ];
@@ -682,19 +693,12 @@ pub(crate) mod sessions {
     pub(crate) fn help_items(app: &App, data: &UiData) -> Vec<(&'static str, &'static str)> {
         super::help_items(BINDINGS, app, data)
     }
-
-    fn show_all_label(app: &App, _: &UiData) -> &'static str {
-        if app.sessions.show_all_providers {
-            texts::tui_key_sessions_all_active()
-        } else {
-            texts::tui_key_sessions_all()
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::providers::{self, Intent};
+    use super::sessions;
     use crossterm::event::KeyCode;
 
     #[test]
@@ -756,5 +760,14 @@ mod tests {
             );
             seen.push(binding.intent);
         }
+    }
+
+    #[test]
+    fn sessions_a_is_not_a_registered_action() {
+        assert_eq!(sessions::intent_for(KeyCode::Char('a')), None);
+        assert_eq!(
+            sessions::intent_for(KeyCode::Char('p')),
+            Some(sessions::Intent::Project)
+        );
     }
 }

@@ -78,6 +78,8 @@ struct Usage {
 struct PromptTokensDetails {
     #[serde(default)]
     cached_tokens: u32,
+    #[serde(default)]
+    cache_write_tokens: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -187,7 +189,7 @@ pub fn create_anthropic_sse_stream(
                                     // build_stream_usage_json; output_tokens stays 0 at start.
                                     let cached = extract_cache_read_tokens(usage).unwrap_or(0);
                                     let cache_creation =
-                                        usage.cache_creation_input_tokens.unwrap_or(0);
+                                        extract_cache_write_tokens(usage).unwrap_or(0);
                                     start_usage["input_tokens"] = json!(usage
                                         .prompt_tokens
                                         .saturating_sub(cached)
@@ -706,7 +708,7 @@ pub fn create_anthropic_sse_stream(
 /// are mutually exclusive: input + cache_read + cache_creation == prompt_tokens.
 fn build_stream_usage_json(usage: &Usage) -> serde_json::Value {
     let cached = extract_cache_read_tokens(usage).unwrap_or(0);
-    let cache_creation = usage.cache_creation_input_tokens.unwrap_or(0);
+    let cache_creation = extract_cache_write_tokens(usage).unwrap_or(0);
     let input_tokens = usage
         .prompt_tokens
         .saturating_sub(cached)
@@ -766,6 +768,18 @@ fn extract_cache_read_tokens(usage: &Usage) -> Option<u32> {
         .prompt_tokens_details
         .as_ref()
         .map(|details| details.cached_tokens)
+}
+
+fn extract_cache_write_tokens(usage: &Usage) -> Option<u32> {
+    if let Some(value) = usage.cache_creation_input_tokens {
+        return Some(value);
+    }
+
+    usage
+        .prompt_tokens_details
+        .as_ref()
+        .map(|details| details.cache_write_tokens)
+        .filter(|value| *value > 0)
 }
 
 #[cfg(test)]
@@ -934,7 +948,7 @@ mod tests {
     #[tokio::test]
     async fn streaming_message_usage_includes_cache_token_fields() {
         let input = concat!(
-            "data: {\"id\":\"chatcmpl_1\",\"model\":\"gpt-4o\",\"choices\":[{\"delta\":{}}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":0,\"prompt_tokens_details\":{\"cached_tokens\":5},\"cache_creation_input_tokens\":2}}\n\n",
+            "data: {\"id\":\"chatcmpl_1\",\"model\":\"gpt-4o\",\"choices\":[{\"delta\":{}}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":0,\"prompt_tokens_details\":{\"cached_tokens\":5,\"cache_write_tokens\":2}}}\n\n",
             "data: {\"id\":\"chatcmpl_1\",\"model\":\"gpt-4o\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":7,\"cache_read_input_tokens\":6,\"cache_creation_input_tokens\":3}}\n\n",
             "data: [DONE]\n\n"
         );
